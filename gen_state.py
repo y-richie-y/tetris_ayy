@@ -19,6 +19,15 @@ def copy_board(b):
 
 ox, oy = (5, 16)
 
+def check_collision(b,x,y,o):
+
+def drop_piece(p, x, y, o):
+    return (x,y,o)
+
+def gen_states(b, p):
+
+
+
 for piece_id in "JIZLOTS":
     cur_piece = rotation_table[piece_id]
 
