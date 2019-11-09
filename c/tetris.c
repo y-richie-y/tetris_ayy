@@ -5,153 +5,193 @@
 #include <ncurses.h>
 #include "tetris.h"
 
+int outOfBounds(Point p) {
+    return (p.x < 0 || p.x >= COLS || p.y < 0);
+}
+
+void fPiecePos(Board board, Point *ps) {
+    for (int i = 0; i < 4; i++) {
+        ps[i] = (Point){
+            board.fPiece.p.x + board.fPiece.piece[i].x,
+            board.fPiece.p.y + board.fPiece.piece[i].y,
+        };
+    }
+}
+
+int setFPieceVis(Board *board, int visible) {
+    FPiece fPiece = board->fPiece;
+    if (fPiece.visible == visible)
+        return 0;
+
+    Point ps[4];
+    fPiecePos(*board, (Point*)&ps);
+    for (int i = 0; i < 4; i++) {
+        if (visible && (outOfBounds(ps[i]) || board->table[ps[i].x][ps[i].y])) {
+            // clash: undo changes
+            for (int j = i - 1; j >= 0; j--)
+                board->table[ps[j].x][ps[j].y] = 0;
+            return 1;
+        }
+        board->table[ps[i].x][ps[i].y] = visible ? fPiece.id : 0;
+    }
+    
+    board->fPiece.visible = visible;
+    return 0;
+}
+
 void printBoard(Board board) {
     move(0, 0);
     for (int y = ROWS - 1; y >= 0; y--) {
-        printw("%-2d ", y);
+        printw("%-2d", y);
         for (int x = 0; x < COLS; x++)
             printw(board.table[x][y] ? "#" : " ");
         printw("\n");
     }
-    printw(" 1234567890\n");
+    printw("  1234567890\n");
     refresh();
 }
 
-int setFloatingPiece(Board *board, int visible) {
-    FloatingPiece floatingPiece = board->floatingPiece;
-    Point *floatingPoints = (Point*)floatingPiece.piece.ps;
-    for (int i = 0; i < 4; i++) {
-        Point p = {
-            floatingPiece.p.x + floatingPiece.piece.ps[i].x,
-            floatingPiece.p.y + floatingPiece.piece.ps[i].y
-        };
-        if (p.x < 0 || p.x >= COLS || (visible && board->table[p.x][p.y])) {
-            // clash: undo changes
-            for (int j = i-1; j >= 0; j--)
-                board->table[p.x][p.y] = 0;
-            return 1;
+void checkLines(Board *board) {
+    for (int y = 0; y < ROWS; y++) {
+        int clear = 1;
+        for (int x = 0; x < COLS; x++) {
+            if (!board->table[x][y]) {
+                clear = 0;
+                break;
+            }
         }
-        board->table[p.x][p.y] = visible ? floatingPiece.id + 1 : 0;
+        if (clear) {
+            for (int yy = y--; yy < ROWS - 1; yy++)
+                for (int x = 0; x < COLS; x++)
+                    board->table[x][yy] = board->table[x][yy+1];
+        }
     }
-    return 0;
 }
 
 int spawn(Board *board, int pieceId) {
-    board->floatingPiece = (FloatingPiece){pieceId, SPAWN, PIECES[pieceId]};
-    return setFloatingPiece(board, 1);;
+    board->fPiece = (FPiece){pieceId, SPAWN, 0, 0};
+    for (int i = 0; i < 4; i++)
+        board->fPiece.piece[i] = PIECES[pieceId][i];
+    return (setFPieceVis(board, 1));
 }
 
-void drop(Board *board) {
-    setFloatingPiece(board, 0);
-    board->floatingPiece.p.y--;
-    setFloatingPiece(board, 1);
-}
-
-int checkSkirt(Board *board) {
-    FloatingPiece floatingPiece = board->floatingPiece;
-
-    int skirt[4] = {3};
-    for (int i = 0; i < 4; i++) {
-        Point p = floatingPiece.piece.ps[i];
-        if (p.y < skirt[p.x + 2])
-            skirt[p.x + 2] = p.y;
+int drop(Board *board) {
+    setFPieceVis(board, 0);
+    int *y = &board->fPiece.p.y;
+    (*y)--;
+    if (setFPieceVis(board, 1)) {
+        (*y)++;
+        setFPieceVis(board, 1);
+        checkLines(board);
+        return spawn(board, rand()%7);
     }
-
-    for (int i = 0; i < 4; i++) {
-        if (skirt[i] == 3)
-            continue;
-        Point pSkirt = {floatingPiece.p.x + i - 2, floatingPiece.p.y + skirt[i]};
-        if (board->table[pSkirt.x][pSkirt.y - 1] || pSkirt.y <= 0) {
-            return 1;
-        }
-    }
-
     return 0;
 }
 
 void rotate(Board *board, int direction) {
     if (direction * direction != 1)
         return;
-    setFloatingPiece(board, 0);
-    Piece *piece = &board->floatingPiece.piece;
+    setFPieceVis(board, 0);
+
+    FPiece *fPiece = &board->fPiece;
+    Point *piece = (Point*)&fPiece->piece;
     for (int i = 0; i < 4; i++)
-        piece->ps[i] = (Point){direction*piece->ps[i].y, -direction*piece->ps[i].x};
-    while (checkSkirt(board))
-        board->floatingPiece.p.y++;
-    setFloatingPiece(board, 1);
+        piece[i] = (Point){direction*piece[i].y, -direction*piece[i].x};
+    fPiece->rotation = (fPiece->rotation + direction + 4) % 4;
+    if (setFPieceVis(board, 1)) {
+        Point kicks[5];
+        int rotation = fPiece->rotation;
+        Point flips = {
+            rotation == 0 || rotation == 3 ? direction : -direction,
+            rotation == 0 || rotation == 2 ? direction : -direction,
+        };
+        if (fPiece->id == 1)
+            for (int i = 0; i < 5; i++)
+                kicks[i] = (Point){KICKS1[i].x * flips.x, KICKS1[i].y * flips.y};
+        else
+            for (int i = 0; i < 5; i++)
+                kicks[i] = (Point){KICKS2[i].x * flips.x, KICKS2[i].y * flips.y};
+        
+        // try 5 kick tests
+        for (int i = 0; i < 5; i++) {
+            fPiece->p.x += kicks[i].x;
+            fPiece->p.y += kicks[i].y;
+            if (setFPieceVis(board, 1) == 0) // success
+                return;
+            fPiece->p.x -= kicks[i].x;
+            fPiece->p.y -= kicks[i].y;
+        }
+    }
+    else // success
+        return;
+    // failure
+    for (int i = 0; i < 4; i++)
+        piece[i] = (Point){-direction*piece[i].y, direction*piece[i].x};
+    fPiece->rotation = (fPiece->rotation - direction + 4) % 4;
 }
 
 void shift(Board *board, int direction) {
     if (direction * direction != 1)
         return;
-    setFloatingPiece(board, 0);
-    board->floatingPiece.p.x += direction;
-    if (setFloatingPiece(board, 1)) {
-        board->floatingPiece.p.x -= direction;
-        setFloatingPiece(board, 1);
+    setFPieceVis(board, 0);
+
+    int *x = &board->fPiece.p.x;
+    *x += direction;
+    if (setFPieceVis(board, 1)) {
+        *x -= direction;
+        setFPieceVis(board, 1);
     }
 }
 
-int update(Board *board) {
-    FloatingPiece *floatingPiece = &board->floatingPiece;
-    Point *floatingPoints = floatingPiece->piece.ps;
-
-    // check
-    if (checkSkirt(board))
-        return spawn(board, rand() % 7);
-
-    // check passed
-    drop(board);
-    return 0;
-}
-
-long long current_timestamp() {
+long long currentTimestamp() {
     struct timeval tv; 
-    gettimeofday(&tv, NULL); // get current time
-    long long milliseconds = tv.tv_sec*1000LL + tv.tv_usec/1000; // calculate milliseconds
+    gettimeofday(&tv, NULL);
+    long long milliseconds = tv.tv_sec*1000LL + tv.tv_usec/1000;
     return milliseconds;
 }
 
 int main() {
     initscr();
-    keypad(stdscr, TRUE);
     noecho();
     timeout(0);
+    keypad(stdscr, TRUE);
     
     Board board;
     for (int x = 0; x < COLS; x++)
         for (int y = 0; y < ROWS; y++)
             board.table[x][y] = 0;
 
-    spawn(&board, 0);
+    spawn(&board, rand()%7);
     printBoard(board);
+
+    long long prev = currentTimestamp();
     int c;
-    long long prev = current_timestamp();
     while (1) {
         c = getch();
-        FloatingPiece *floatingPiece = &board.floatingPiece;
-        int dx = 0, drot = 0;
         switch (c) {
             case KEY_LEFT:
                 shift(&board, -1);
+                printBoard(board);
                 break;
             case KEY_RIGHT:
                 shift(&board, 1);
+                printBoard(board);
                 break;
             case KEY_UP:
                 rotate(&board, 1);
+                printBoard(board);
                 break;
             case KEY_DOWN:
                 rotate(&board, -1);
+                printBoard(board);
                 break;
             case ' ':
-                while (!checkSkirt(&board))
-                    update(&board);
+                break;
         }
 
-        if (current_timestamp() - prev > 1000 / UPS) {
-            prev = current_timestamp();
-            if (update(&board))
+        if (currentTimestamp() - prev > 1000/UPS) {
+            prev = currentTimestamp();
+            if (drop(&board))
                 break;
             printBoard(board);
         }

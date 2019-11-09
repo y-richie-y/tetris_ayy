@@ -5,39 +5,49 @@
 #define HEIGHT  96
 #define SCALE   4
 #define UPS     4
+#define FPS     30
 
 /********************************************/
 /*          CORE TETRIS CONSTANTS           */
 /********************************************/
-// Point
 typedef struct {
     int x, y;
 } Point;
 static const Point SPAWN = {COLS / 2, ROWS - 3};
 
-// Pieces
-typedef struct {
-    Point ps[4];
-} Piece;
-static const Piece J = {{{ 1,  0}, { 0,  0}, {-1,  0}, {-1,  1}}};
-static const Piece I = {{{ 2,  0}, { 1,  0}, { 0,  0}, {-1,  0}}};
-static const Piece Z = {{{ 1,  0}, { 0,  0}, { 0,  1}, {-1,  1}}};
-static const Piece L = {{{ 1,  1}, { 1,  0}, { 0,  0}, {-1,  0}}};
-static const Piece O = {{{ 1, -1}, { 1,  0}, { 0,  0}, { 0, -1}}};
-static const Piece T = {{{ 1,  0}, { 0,  0}, {-1,  0}, { 0,  1}}};
-static const Piece S = {{{ 1,  1}, { 0,  1}, { 0,  0}, {-1,  0}}};
-static const Piece PIECES[] = {J, I, Z, L, O, T, S};
+/*
+static const Point J[4] = {{ 1,  0}, { 0,  0}, {-1,  0}, {-1,  1}};
+static const Point I[4] = {{ 2,  0}, { 1,  0}, { 0,  0}, {-1,  0}};
+static const Point Z[4] = {{ 1,  0}, { 0,  0}, { 0,  1}, {-1,  1}};
+static const Point L[4] = {{ 1,  1}, { 1,  0}, { 0,  0}, {-1,  0}};
+static const Point O[4] = {{ 1, -1}, { 1,  0}, { 0,  0}, { 0, -1}};
+static const Point T[4] = {{ 1,  0}, { 0,  0}, {-1,  0}, { 0,  1}};
+static const Point S[4] = {{ 1,  1}, { 0,  1}, { 0,  0}, {-1,  0}};
+*/
+static const Point PIECES[7][4]= {
+    {{ 1,  0}, { 0,  0}, {-1,  0}, {-1,  1}},   // J
+    {{ 2,  0}, { 1,  0}, { 0,  0}, {-1,  0}},   // I
+    {{ 1,  0}, { 0,  0}, { 0,  1}, {-1,  1}},   // Z
+    {{ 1,  1}, { 1,  0}, { 0,  0}, {-1,  0}},   // L
+    {{ 1, -1}, { 1,  0}, { 0,  0}, { 0, -1}},   // O
+    {{ 1,  0}, { 0,  0}, {-1,  0}, { 0,  1}},   // T
+    {{ 1,  1}, { 0,  1}, { 0,  0}, {-1,  0}},   // S
+};
+
+static const Point KICKS1[5] = {{ 0,  0}, {-1,  0}, {-1,  1}, { 0, -2}, {-1, -2}};
+static const Point KICKS2[5] = {{ 0,  0}, {-2,  0}, { 1,  0}, {-2, -1}, { 1,  2}};
 
 typedef struct {
     int id;
     Point p;
-    Piece piece;
-} FloatingPiece;
+    int rotation;
+    int visible;
+    Point piece[4];
+} FPiece;
 
-// Board
 typedef struct {
     int table[COLS][ROWS];
-    FloatingPiece floatingPiece;
+    FPiece fPiece;
 } Board;
 
 /********************************************/
@@ -60,12 +70,12 @@ static const Color GREEN    = {0b00000, 0b111111, 0b00000};
 /********************************************/
 /*          METHOD DECLARATIONS             */
 /********************************************/
+int outOfBounds(Point);
+void fPiecePos(Board, Point*);
+int setFPieceVisibility(Board*, int);
 void printBoard(Board);
-int setFloatingPiece(Board*, int);
 int spawn(Board*, int);
-void drop(Board*);
-int checkSkirt(Board*);
+int drop(Board*);
 void rotate(Board*, int);
 void shift(Board*, int);
-int update(Board*);
-long long current_timestamp();
+long long currentTimestamp();
