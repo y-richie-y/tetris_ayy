@@ -3,7 +3,7 @@
 #define WIDTH   64
 
 #define HEIGHT  96
-#define SCALE   4
+#define SCALE   1
 #define UPS     4
 #define FPS     30
 
@@ -71,8 +71,7 @@ static const Color GREEN    = {0b00000, 0b111111, 0b00000};
 /*          METHOD DECLARATIONS             */
 /********************************************/
 int outOfBounds(Point);
-void fPiecePos(Board, Point*);
-int setFPieceVisibility(Board*, int);
+int setFPieceVis(Board*, int);
 void printBoard(Board);
 int spawn(Board*, int);
 int drop(Board*);

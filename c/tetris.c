@@ -9,22 +9,19 @@ int outOfBounds(Point p) {
     return (p.x < 0 || p.x >= COLS || p.y < 0);
 }
 
-void fPiecePos(Board board, Point *ps) {
-    for (int i = 0; i < 4; i++) {
-        ps[i] = (Point){
-            board.fPiece.p.x + board.fPiece.piece[i].x,
-            board.fPiece.p.y + board.fPiece.piece[i].y,
-        };
-    }
-}
-
 int setFPieceVis(Board *board, int visible) {
     FPiece fPiece = board->fPiece;
     if (fPiece.visible == visible)
         return 0;
 
+    // find absolute position of fPiece on the board
     Point ps[4];
-    fPiecePos(*board, (Point*)&ps);
+    for (int i = 0; i < 4; i++) {
+        ps[i] = (Point){
+            fPiece.p.x + fPiece.piece[i].x,
+            fPiece.p.y + fPiece.piece[i].y,
+        };
+    }
     for (int i = 0; i < 4; i++) {
         if (visible && (outOfBounds(ps[i]) || board->table[ps[i].x][ps[i].y])) {
             // clash: undo changes
@@ -42,12 +39,24 @@ int setFPieceVis(Board *board, int visible) {
 void printBoard(Board board) {
     move(0, 0);
     for (int y = ROWS - 1; y >= 0; y--) {
-        printw("%-2d", y);
-        for (int x = 0; x < COLS; x++)
-            printw(board.table[x][y] ? "#" : " ");
-        printw("\n");
+        for (int i = 0; i < SCALE; i++) {
+            if (i == 0)
+                printw("%-2d", y);
+            else
+                printw("  ");
+            for (int x = 0; x < COLS; x++)
+                for (int j = 0; j < SCALE; j++)
+                    printw(board.table[x][y] ? "#" : " ");
+            printw("\n");
+        }
     }
-    printw("  1234567890\n");
+    printw("  ");
+    for (int i = 0; i < 10; i++) {
+        printw("%d", i);
+        for (int j = 0; j < SCALE-1; j++)
+            printw(" ");
+    }
+    printw("\n");
     refresh();
 }
 
@@ -166,7 +175,8 @@ int main() {
 
     long long prev = currentTimestamp();
     int c;
-    while (1) {
+    int quitting = 0, paused = 0;
+    while (!quitting) {
         c = getch();
         switch (c) {
             case KEY_LEFT:
@@ -187,10 +197,18 @@ int main() {
                 break;
             case ' ':
                 break;
+            case 'q':
+                quitting = 1;
+                break;
+            case 'p':
+                paused = ~paused;
+                break;
         }
 
         if (currentTimestamp() - prev > 1000/UPS) {
             prev = currentTimestamp();
+            if (paused)
+                continue;
             if (drop(&board))
                 break;
             printBoard(board);
